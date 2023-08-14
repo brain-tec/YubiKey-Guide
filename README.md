@@ -48,12 +48,13 @@ If you have a comment or suggestion, please open an [Issue](https://github.com/d
 - [Verify card](#verify-card)
 - [Multiple YubiKeys](#multiple-yubikeys)
   - [Switching between two or more Yubikeys](#switching-between-two-or-more-yubikeys)
+- [Multiple Hosts](#multiple-hosts)
 - [Cleanup](#cleanup)
 - [Using keys](#using-keys)
 - [Rotating keys](#rotating-keys)
   - [Setup environment](#setup-environment)
   - [Renewing sub-keys](#renewing-sub-keys)
-  - [Rotating keys](#rotating-keys)
+  - [Rotating keys](#rotating-keys-1)
 - [Adding notations](#adding-notations)
 - [SSH](#ssh)
   - [Create configuration](#create-configuration)
@@ -70,7 +71,7 @@ If you have a comment or suggestion, please open an [Issue](https://github.com/d
   - [OpenBSD](#openbsd)
   - [Windows](#windows)
     - [WSL](#wsl)
-      - [Use ssh-agent or use S.weasel-pegant](#use-ssh-agent-or-use-sweasel-pegant)
+      - [Use ssh-agent or use S.weasel-pageant](#use-ssh-agent-or-use-sweasel-pageant)
       - [Prerequisites](#prerequisites)
       - [WSL configuration](#wsl-configuration)
       - [Remote host configuration](#remote-host-configuration)
@@ -79,6 +80,9 @@ If you have a comment or suggestion, please open an [Issue](https://github.com/d
   - [Steps for older distributions](#steps-for-older-distributions)
   - [Chained GPG Agent Forwarding](#chained-gpg-agent-forwarding)
 - [Using Multiple Keys](#using-multiple-keys)
+- [Adding an identity](#adding-an-identity)
+  - [Add an identity to your master key](#add-an-identity-to-your-master-key)
+  - [Updating your YubiKey](#updating-your-yubikey)
 - [Require touch](#require-touch)
 - [Email](#email)
   - [Mailvelope on macOS](#mailvelope-on-macos)
@@ -357,7 +361,7 @@ let
         yubikey-personalization
         yubikey-personalization-gui
         yubico-piv-tool
-        yubioath-desktop
+        yubioath-flutter
 
         # Testing
         ent
@@ -1676,7 +1680,149 @@ GPG will then scan your first Yubikey for GPG keys and recreate the stubs to poi
 To return to using the second Yubikey just repeat (insert other Yubikey and re-run command).
 	
 Obviously this command is not easy to remember so it is recommended to either create a script or a shell alias to make this more user friendly.
+
+# Multiple Hosts
+
+It can be convenient to use your YubiKey on multiple hosts:
+
+* a desktop plus a laptop
+* home and work computers
+* an environment like [Tails](https://tails.boum.org)
+
+The simplest way to set up a second host is to begin by exporting your public key and trust settings on the host where your YubiKey is already working:
+
+``` console
+$ gpg --armor --export $KEYID > gpg-public-key-$KEYID.asc
+$ gpg --export-ownertrust > gpg-owner-trust.txt
+```
+
+Move both files to the second host. Then, on the second host:
+
+1. Define your KEYID. For example:
+
+	``` console
+	$ export KEYID=0xFF3E7D88647EBCDB
+	``` 
+
+2. Import your public key:
+
+	``` console
+	$ gpg --import gpg-public-key-$KEYID.asc
+	```
+
+3. Import the trust settings:
+
+	``` console
+	$ gpg --import-ownertrust < gpg-owner-trust.txt
+	```
+
+4. Insert your YubiKey into a USB port.
+5. Import the private key stubs from the YubiKey:
+
+	``` console
+	$ gpg --card-status
+	```
+
+If you need to set up a second host when you are travelling and don't have ready access to your primary host, you can import your public key from a key-server and set trust manually:
+
+1. Define your KEYID. For example:
+
+	``` console
+	$ export KEYID=0xFF3E7D88647EBCDB
+	``` 
+
+2. Fetch the public key from a key-server. For example:
+
+	``` console
+	$ gpg --keyserver hkps://keyserver.ubuntu.com:443 --recv $KEYID
+	```
+
+3. Set ultimate trust:
+
+	``` console
+	$ gpg --edit-key $KEYID
+	gpg> trust
+	Your decision? 5
+	Do you really want to set this key to ultimate trust? (y/N) y
+	gpg> quit
+	```
+
+4. Insert your YubiKey into a USB port.
+5. Import the private key stubs from the YubiKey:
+
+	``` console
+	$ gpg --card-status
+	```
+
+Another approach is to add the URL of your public key to your YubiKey:
+
+1. Define your KEYID. For example:
+
+	``` console
+	$ KEYID=0xFF3E7D88647EBCDB
+	``` 
+
+2. Construct the URL (based on [Shaw 2003](https://datatracker.ietf.org/doc/html/draft-shaw-openpgp-hkp-00)):
+
+	``` console
+	$ [[ ! "$KEYID" =~ ^"0x" ]] && KEYID="0x${KEYID}"
+	$ URL="hkps://keyserver.ubuntu.com:443/pks/lookup?op=get&search=${KEYID}"
+	$ echo $URL
+	hkps://keyserver.ubuntu.com:443/pks/lookup?op=get&search=0xFF3E7D88647EBCDB
+	```
+
+3. Insert your YubiKey into a USB port.
+4. Add the URL to your YubiKey (will prompt for your YubiKey's admin PIN):
+
+	``` console
+	$ gpg --edit-card
+	gpg/card> admin
+	gpg/card> url
+	URL to retrieve public key: hkps://keyserver.ubuntu.com:443/pks/lookup?op=get&search=0xFF3E7D88647EBCDB
+	gpg/card> quit
+	```
+
+	Note:
+
+	* You do not have to use a *keyserver* URL. You can export your public key as an armored ASCII file and upload it to any place on the web where it can be downloaded using HTTP/HTTPS.
+
+Once the URL of your public key is present on your YubiKey, setting up a new host becomes:
+
+1. Insert your YubiKey into a USB port.
+
+2. Use the `fetch` sub-command to retrieve your public key using the URL stored on the card:
+
+	``` console
+	$ gpg --edit-card
 	
+	gpg/card> fetch
+	gpg: requesting key from 'hkps://keyserver.ubuntu.com:443/pks/lookup?op=get&search=0xFF3E7D88647EBCDB'
+	gpg: /home/pi/.gnupg/trustdb.gpg: trustdb created
+	gpg: key FF3E7D88647EBCDB: public key "Dr Duh <doc@duh.to>" imported
+	gpg: Total number processed: 1
+	gpg:               imported: 1
+	
+	gpg/card> quit
+	```
+
+	This step also imports the private key stubs from the YubiKey.
+
+3. Define your KEYID (which appears in the output in the previous step):
+
+	``` console
+	$ export KEYID=0xFF3E7D88647EBCDB
+	``` 
+
+4. Set ultimate trust:
+
+	``` console
+	$ gpg --edit-key $KEYID
+	gpg> trust
+	Your decision? 5
+	Do you really want to set this key to ultimate trust? (y/N) y
+	gpg> quit
+	```
+
 # Cleanup
 
 Before finishing the setup, ensure you have done the following:
@@ -2425,7 +2571,7 @@ The goal here is to make the SSH client inside WSL work together with the Window
 
 **Note** this works only for SSH agent forwarding. Real GPG forwarding (encryption/decryption) is actually not supported. See [weasel-pageant](https://github.com/vuori/weasel-pageant) for further information or consider using [wsl2-ssh-pageant](https://github.com/BlackReloaded/wsl2-ssh-pageant) which supports both SSH and GPG agent forwarding.
 
-#### Use ssh-agent or use S.weasel-pegant
+#### Use ssh-agent or use S.weasel-pageant
 
 One way to forward is just `ssh -A` (still need to eval weasel to setup local ssh-agent), and only relies on OpenSSH. In this track, `ForwardAgent` and `AllowAgentForwarding` in ssh/sshd config may be involved; However, if you use the other way (gpg ssh socket forwarding), you should not enable `ForwardAgent` in ssh config. See [SSH Agent Forwarding](#remote-machines-ssh-agent-forwarding) for more info.
 
@@ -2650,6 +2796,128 @@ $ ~/scripts/remove-keygrips.sh $KEYID
 
 See discussion in Issues [#19](https://github.com/drduh/YubiKey-Guide/issues/19) and [#112](https://github.com/drduh/YubiKey-Guide/issues/112) for more information and troubleshooting steps.
 
+# Adding an identity
+
+You may need to add an identity after you've created, backed up, and moved your keys to your YubiKey. To do so, you'll need to first add the identity to your master key, and then reset your YubiKey and use `keytocard` to move the subkeys to your card again.
+
+## Add an identity to your master key
+
+To add another identity to your GPG key, follow the same process as generating keys: boot to a secure environment, install required software and disconnect networking.
+
+Connect the offline secret storage device with the master keys and identify the disk label:
+
+```console
+$ sudo dmesg | tail
+mmc0: new high speed SDHC card at address a001
+mmcblk0: mmc0:a001 SS16G 14.8 GiB (ro)
+mmcblk0: p1 p2
+```
+
+Decrypt and mount the offline volume:
+
+```console
+$ sudo cryptsetup luksOpen /dev/mmcblk0p1 secret
+Enter passphrase for /dev/mmcblk0p1:
+
+$ sudo mount /dev/mapper/secret /mnt/encrypted-storage
+```
+
+Restore your backup to a temporary directory:
+
+```console
+$ export GNUPGHOME=$(mktemp -d -t gnupg_$(date +%Y%m%d%H%M)_XXX)
+
+$ cp -avi /mnt/encrypted-storage/tmp.XXX/* $GNUPGHOME
+```
+
+Edit your master key to add your new identity:
+
+```console
+$ KEYID=«your keyID»
+$ gpg --expert --edit-key $KEYID
+
+gpg> adduid
+Real name: «your name»
+Email address: «user@domain.tld»
+Comment: «something»
+You selected this USER-ID:
+      "«your name» («something») <«user@domain.tld»>"
+
+Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? O
+
+gpg> trust
+
+Please decide how far you trust this user to correctly verify other users' keys
+(by looking at passports, checking fingerprints from different sources, etc.)
+
+  1 = I don't know or won't say
+  2 = I do NOT trust
+  3 = I trust marginally
+  4 = I trust fully
+  5 = I trust ultimately
+  m = back to the main menu
+
+Your decision? 5
+Do you really want to set this key to ultimate trust? (y/N) y
+
+gpg> save
+```
+
+Now, re-export your master and sub keys:
+
+```console
+$ gpg --armor --export-secret-keys $KEYID > $GNUPGHOME/mastersub.key
+
+$ gpg --armor --export-secret-subkeys $KEYID > $GNUPGHOME/sub.key
+```
+
+And your public key:
+
+```console
+$ gpg --armor --export $KEYID | sudo tee /mnt/public/gpg-$KEYID-$(date +%F).asc
+```
+
+As before, on Windows, note that using any extension other than `.gpg` or attempting IO redirection to a file will garble the secret key, making it impossible to import it again at a later date:
+
+```console
+$ gpg -o \path\to\dir\mastersub.gpg --armor --export-secret-keys $KEYID
+
+$ gpg -o \path\to\dir\sub.gpg --armor --export-secret-subkeys $KEYID
+
+$ gpg -o \path\to\dir\pubkey.gpg --armor --export $KEYID
+```
+
+Copy the **new** temporary working directory to encrypted offline storage, which should still be mounted:
+
+```console
+$ sudo cp -avi $GNUPGHOME /mnt/encrypted-storage
+```
+
+There should now be at least two versions of the master and sub-keys backed up:
+
+```console
+$ ls /mnt/encrypted-storage
+lost+found  tmp.ykhTOGjR36  tmp.2gyGnyCiHs
+```
+
+Unmount and close the encrypted volume:
+
+```console
+$ sudo umount /mnt/encrypted-storage
+
+$ sudo cryptsetup luksClose /dev/mapper/secret
+```
+
+## Updating your YubiKey
+
+Now that your keys have been updated with your new identity, you have to move them onto your YubiKey. To do so, you need to first [reset](#reset) the OpenPGP applet on your YubiKey, and then follow the steps to [configure your smartcard](#configure-smartcard) again.
+
+Now you can [transfer the keys](#transfer-keys) to your YubiKey. Once you've done so, be sure to reboot or securely erase the GPG temporary working directory, and `unset GNUPGHOME`.
+
+Finally, re-import the public key, as described in the [using keys](#using-keys) section.
+
+Run `gpg -K` to confirm that your new identity is listed.
+
 # Require touch
 
 **Note** This is not possible on YubiKey NEO.
@@ -2675,8 +2943,10 @@ $ ykman openpgp keys set-touch sig on
 Encryption:
 
 ```console
-$ ykman openpgp keys set-touch enc on
+$ ykman openpgp keys set-touch dec on
 ```
+
+**Note** Versions of YubiKey Manager before 5.1.0 use `enc` instead of `dec` for encryption.
 
 Depending on how the YubiKey is going to be used, you may want to look at the policy options for each of these and adjust the above commands accordingly. They can be viewed with the following command:
 
@@ -2684,28 +2954,27 @@ Depending on how the YubiKey is going to be used, you may want to look at the po
 $ ykman openpgp keys set-touch -h
 Usage: ykman openpgp keys set-touch [OPTIONS] KEY POLICY
 
-  Set touch policy for OpenPGP keys.
+  Set the touch policy for OpenPGP keys.
 
-  KEY     Key slot to set (sig, enc, aut or att).
-  POLICY  Touch policy to set (on, off, fixed, cached or cached-fixed).
-
-  The touch policy is used to require user interaction for all operations using the private key on the YubiKey. The touch policy is set individually for each key slot. To see the current touch policy, run
-
-      $ ykman openpgp info
+  The touch policy is used to require user interaction for all operations using the private key on the YubiKey. The touch policy is set
+  individually for each key slot. To see the current touch policy, run the "openpgp info" subcommand.
 
   Touch policies:
 
-  Off (default)   No touch required
-  On              Touch required
-  Fixed           Touch required, can't be disabled without a full reset
-  Cached          Touch required, cached for 15s after use
-  Cached-Fixed    Touch required, cached for 15s after use, can't be disabled
-                  without a full reset
+  Off (default)   no touch required
+  On              touch required
+  Fixed           touch required, can't be disabled without deleting the private key
+  Cached          touch required, cached for 15s after use
+  Cached-Fixed    touch required, cached for 15s after use, can't be disabled
+                  without deleting the private key
+
+  KEY     key slot to set (sig, dec, aut or att)
+  POLICY  touch policy to set (on, off, fixed, cached or cached-fixed)
 
 Options:
-  -a, --admin-pin TEXT  Admin PIN for OpenPGP.
-  -f, --force           Confirm the action without prompting.
-  -h, --help            Show this message and exit.
+  -a, --admin-pin TEXT  Admin PIN for OpenPGP
+  -f, --force           confirm the action without prompting
+  -h, --help            show this message and exit
 ```
 
 If the YubiKey is going to be used within an email client that opens and verifies encrypted mail, `Cached` or `Cached-Fixed` may be desirable.
@@ -2860,6 +3129,24 @@ gpg: [stdin]: encryption failed: Unusable public key
 - If you lost your GPG public key, follow [this guide](https://www.nicksherlock.com/2021/08/recovering-lost-gpg-public-keys-from-your-yubikey/) to recover it from YubiKey.
 
 - Refer to Yubico article [Troubleshooting Issues with GPG](https://support.yubico.com/hc/en-us/articles/360013714479-Troubleshooting-Issues-with-GPG) for additional guidance.
+
+- If, when you try the above `--card-status` command, you get receive the error, `gpg: selecting card failed: No such device` or `gpg: OpenPGP card not available: No such device`, it's possible that the latest release of pcscd is now requires polkit rules to operate properly. Create the following file to allow users in the `wheel` group to use the card. Be sure to restart pcscd when you're done to allow the new rules to take effect.
+```
+cat << EOF >  /etc/polkit-1/rules.d/99-pcscd.rules
+polkit.addRule(function(action, subject) {
+        if (action.id == "org.debian.pcsc-lite.access_card" &&
+                subject.isInGroup("wheel")) {
+                return polkit.Result.YES;
+        }
+});
+polkit.addRule(function(action, subject) {
+        if (action.id == "org.debian.pcsc-lite.access_pcsc" &&
+                subject.isInGroup("wheel")) {
+                return polkit.Result.YES;
+        }
+});
+EOF
+```
 
 # Alternatives
 
