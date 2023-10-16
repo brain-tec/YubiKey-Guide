@@ -2,11 +2,11 @@ This is a guide to using [YubiKey](https://www.yubico.com/products/yubikey-hardw
 
 Keys stored on YubiKey are [non-exportable](http://web.archive.org/web/20201125172759/https://support.yubico.com/hc/en-us/articles/360016614880-Can-I-Duplicate-or-Back-Up-a-YubiKey-) (as opposed to file-based keys that are stored on disk) and are convenient for everyday use. Instead of having to remember and enter passphrases to unlock SSH/GPG keys, YubiKey needs only a physical touch after being unlocked with a PIN. All signing and encryption operations happen on the card, rather than in OS memory.
 
-**Tip** [drduh/Purse](https://github.com/drduh/Purse) is a password manager which uses GPG and YubiKey to securely store and read credentials.
-
-> **Security Note**: If you followed this guide before Jan 2021, your GPG *PIN* and *Admin PIN* may be set to their default values (`123456` and `12345678` respectively). This would allow an attacker to use your Yubikey or reset your PIN. Please see the [Change PIN](#change-pin) section for details on how to change your PINs.
+**Security Note**: If you followed this guide before Jan 2021, your GPG *PIN* and *Admin PIN* may be set to their default values (`123456` and `12345678` respectively). This would allow an attacker to use your Yubikey or reset your PIN. Please see the [Change PIN](#change-pin) section for details on how to change your PINs.
 
 If you have a comment or suggestion, please open an [Issue](https://github.com/drduh/YubiKey-Guide/issues) on GitHub.
+
+**Tip** [drduh/Purse](https://github.com/drduh/Purse) is a password manager which uses GPG and YubiKey to securely store and read credentials.
 
 - [Purchase](#purchase)
 - [Prepare environment](#prepare-environment)
@@ -132,7 +132,7 @@ Verify the signature of the hashes file with GPG:
 
 ```console
 $ gpg --verify SHA512SUMS.sign SHA512SUMS
-gpg: Signature made Sat 17 Dec 2022 11:06:20 AM PST
+gpg: Signature made Sat 07 Oct 2023 01:24:57 PM PDT
 gpg:                using RSA key DF9B9C49EAA9298432589D76DA87E80D6294BE9B
 gpg: Can't check signature: No public key
 
@@ -142,7 +142,7 @@ gpg: Total number processed: 1
 gpg:               imported: 1
 
 $ gpg --verify SHA512SUMS.sign SHA512SUMS
-gpg: Signature made Sat 17 Dec 2022 11:06:20 AM PST
+gpg: Signature made Sat 07 Oct 2023 01:24:57 PM PDT
 gpg:                using RSA key DF9B9C49EAA9298432589D76DA87E80D6294BE9B
 gpg: Good signature from "Debian CD signing key <debian-cd@lists.debian.org>" [unknown]
 gpg: WARNING: This key is not certified with a trusted signature!
@@ -160,7 +160,7 @@ Ensure the SHA512 hash of the live image matches the one in the signed file - if
 
 ```console
 $ grep $(sha512sum debian-live-*-amd64-xfce.iso) SHA512SUMS
-SHA512SUMS:f9976e2090a54667a26554267941792c293628cceb643963e425bf90449e3c0eeb616e8ededc187070910401c8ab0348fdbc3292b6d04e29dcfb472ac258a542  debian-live-11.6.0-amd64-xfce.iso
+SHA512SUMS:3c74715380c804798d892f55ebe4d2f79ae266be93df2468a066c192cfe1af6ddae3139e1937d5cbfa2fccb6fe291920148401de30f504c0876be2f141811ff1  debian-live-12.2.0-amd64-xfce.iso
 ```
 
 See [Verifying authenticity of Debian CDs](https://www.debian.org/CD/verify) for more information.
@@ -214,10 +214,31 @@ Open the terminal and install required software packages.
 ## Debian and Ubuntu
 
 ```console
-$ sudo apt update ; sudo apt -y upgrade
+$ sudo apt update
+
+$ sudo apt -y upgrade
 
 $ sudo apt -y install wget gnupg2 gnupg-agent dirmngr cryptsetup scdaemon pcscd secure-delete hopenpgp-tools yubikey-personalization
 ```
+
+**Note**
+As of 2023 June, the `hopenpgp-tools` is not part of the latest Debian 12 stable package repositories.
+
+To install it, go to [https://packages.debian.org/sid/hopenpgp-tools](https://packages.debian.org/sid/hopenpgp-tools) to select your architecture and then an ftp server.
+
+Edit `/etc/apt/sources.list` and add the ftp server:
+```
+deb http://ftp.debian.org/debian sid main
+```
+
+and then add this to `/etc/apt/preferences` (or a fragment, e.g. `/etc/apt/preferences.d/00-sid`) so that APT still prioritizes packages from the stable repository over sid.
+
+```
+Package: *
+Pin: release n=sid
+Pin-Priority: 10
+```
+
 
 **Note** Live Ubuntu images [may require modification](https://github.com/drduh/YubiKey-Guide/issues/116) to `/etc/apt/sources.list` and may need additional packages:
 
@@ -239,11 +260,16 @@ $ sudo service pcscd start
 $ ~/.local/bin/ykman openpgp info
 ```
 
+**Note** Debian 12 doesn't recommend installing non-Debian packaged Python applications globally. But fortunately, it isn't even necessary as `yubikey-manager` is available in the stable main repository:
+`$ sudo apt install yubikey-manager`.
+
 ## Fedora
 
 ```console
 $ sudo dnf install wget
-$ wget https://github.com/rpmsphere/noarch/raw/master/r/rpmsphere-release-34-2.noarch.rpm
+
+$ wget https://github.com/rpmsphere/noarch/raw/master/r/rpmsphere-release-38-1.noarch.rpm
+
 $ sudo rpm -Uvh rpmsphere-release*rpm
 
 $ sudo dnf install gnupg2 dirmngr cryptsetup gnupg2-smime pcsc-tools opensc pcsc-lite secure-delete pgp-tools yubikey-personalization-gui
@@ -323,13 +349,43 @@ let
       };
 
     in {
-      nixpkgs.config = { allowBroken = true; };
+      nixpkgs.overlays = [
+        # hopenpgp-tools in nixpkgs 23.05 is out-of-date and has a broken build
+        (final: prev: {
+          haskellPackages = prev.haskellPackages.override {
+            overrides = hsFinal: hsPrev:
+              let
+                optparse-applicative =
+                  final.haskell.lib.overrideCabal hsPrev.optparse-applicative
+                  (oldAttrs: {
+                    version = "0.18.1.0";
+                    sha256 =
+                      "sha256-Y4EatP0m6Cm4hoNkMlqIvjrMeYGfW7UAWy3TuWHsxJE=";
+                    libraryHaskellDepends =
+                      (oldAttrs.libraryHaskellDepends or [ ])
+                      ++ (with hsFinal; [
+                        text
+                        prettyprinter
+                        prettyprinter-ansi-terminal
+                      ]);
+                  });
+                hopenpgp-tools =
+                  (final.haskell.lib.overrideCabal hsPrev.hopenpgp-tools
+                    (oldAttrs: {
+                      version = "0.23.8";
+                      sha256 =
+                        "sha256-FYvlVE0o/LOYk3a2rucAqm7tg5D/uNQRRrCu/wlDNAE=";
+                      broken = false;
+                    })).override { inherit optparse-applicative; };
+              in { inherit hopenpgp-tools; };
+          };
+        })
+      ];
 
       isoImage.isoBaseName = lib.mkForce "nixos-yubikey";
       # Uncomment this to disable compression and speed up image creation time
       #isoImage.squashfsCompression = "gzip -Xcompression-level 1";
 
-      boot.kernelPackages = linuxPackages_latest;
       # Always copytoram so that, if the image is booted from, e.g., a
       # USB stick, nothing is mistakenly written to persistent storage.
       boot.kernelParams = [ "copytoram" ];
@@ -442,7 +498,7 @@ in {
 Build the installer and copy it to a USB drive.
 
 ```console
-$ nix build -f yubikey-installer.nix -o installer nixos-yubikey
+$ nix-build yubikey-installer.nix --out-link installer --attr nixos-yubikey
 
 $ sudo cp -v installer/iso/*.iso /dev/sdb; sync
 'installer/iso/nixos-yubikey-22.05beta-248980.gfedcba-x86_64-linux.iso' -> '/dev/sdb'
@@ -550,6 +606,7 @@ charset utf-8
 fixed-list-mode
 no-comments
 no-emit-version
+no-greeting
 keyid-format 0xlong
 list-options show-uid-validity
 verify-options show-uid-validity
@@ -560,7 +617,7 @@ use-agent
 throw-keyids
 ```
 
-**Important** Disable networking for the remainder of the setup.
+**Tip** Networking can be disabled for the remainder of the setup.
 
 # Master key
 
@@ -594,7 +651,6 @@ Do **not** set the master (certify) key to expire - see [Note #3](#notes).
 
 ```console
 $ gpg --expert --full-generate-key
-
 Please select what kind of key you want:
    (1) RSA and RSA (default)
    (2) DSA and Elgamal
@@ -606,6 +662,7 @@ Please select what kind of key you want:
   (10) ECC (sign only)
   (11) ECC (set your own capabilities)
   (13) Existing key
+  (14) Existing key from card
 Your selection? 8
 
 Possible actions for a RSA key: Sign Certify Encrypt Authenticate
@@ -1356,14 +1413,16 @@ $ gpg -o \path\to\dir\pubkey.gpg --armor --export $KEYID
 ```console
 $ gpg --send-key $KEYID
 
-$ gpg --keyserver pgp.mit.edu --send-key $KEYID
-
 $ gpg --keyserver keys.gnupg.net --send-key $KEYID
 
 $ gpg --keyserver hkps://keyserver.ubuntu.com:443 --send-key $KEYID
 ```
 
-After some time, the public key will propagate to [other](https://pgp.key-server.io/pks/lookup?search=doc%40duh.to&fingerprint=on&op=vindex) [servers](https://pgp.mit.edu/pks/lookup?search=doc%40duh.to&op=index).
+Or if [uploading to keys.openpgp.org](https://keys.openpgp.org/about/usage):
+
+```console
+$ gpg --send-key $KEYID | curl -T - https://keys.openpgp.org
+```
 
 # Configure Smartcard
 
@@ -2172,7 +2231,7 @@ Key is valid for? (0)
 ```
 Follow these prompts to set a new expiration date, then `save` to save your changes.
 
-Next, export the public key:
+Next, [export the public key](#export-public-keys):
 
 ```console
 $ gpg --armor --export $KEYID > gpg-$KEYID-$(date +%F).asc
@@ -2182,6 +2241,18 @@ Transfer that public key to the computer from which you use your GPG key, and th
 
 ```console
 $ gpg --import gpg-0x*.asc
+```
+
+Alternatively, use a public key server (it will update the key if already on the server):
+
+```console
+$ gpg --send-key $KEYID
+```
+
+and import the newly updated key on any computer where you wish to use it (it will update the key if previously imported):
+
+```console
+$ gpg --recv $KEYID
 ```
 
 This will extend the validity of your GPG key and will allow you to use it for SSH authorization.  Note that you do _not_ need to update the SSH public key located on remote servers.
@@ -2256,8 +2327,6 @@ $ gpg --import pubkey.asc
 ```
 
 N.B.: The `showpref` command can be issued to ensure that the notions were correctly added.
-
-It is now possible to continue following the Keyoxide guide and upload the key to WKD or to keys.openpgp.org.
 
 # SSH
 
@@ -3214,6 +3283,7 @@ Continue with the Verify section of this guide.
 
 # Links
 
+* [Minimal key management tool written for this guide](https://gitlab.com/lsasolutions/makegpg)
 * https://alexcabal.com/creating-the-perfect-gpg-keypair/
 * https://blog.habets.se/2013/02/GPG-and-SSH-with-Yubikey-NEO
 * https://blog.josefsson.org/2014/06/23/offline-gnupg-master-key-and-subkeys-on-yubikey-neo-smartcard/
