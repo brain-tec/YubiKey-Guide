@@ -99,7 +99,7 @@ If you have a comment or suggestion, please open an [Issue](https://github.com/d
 
 All YubiKeys except the blue "security key" model and the "Bio Series - FIDO Edition" are compatible with this guide. NEO models are limited to 2048-bit RSA keys. Compare YubiKeys [here](https://www.yubico.com/products/yubikey-hardware/compare-products-series/). A list of the YubiKeys compatible with OpenPGP is available [here](https://support.yubico.com/hc/en-us/articles/360013790259-Using-Your-YubiKey-with-OpenPGP). In May 2021, Yubico also released a press release and blog post about supporting resident ssh keys on their Yubikeys including blue "security key 5 NFC" with OpenSSH 8.2 or later, see [here](https://www.yubico.com/blog/github-now-supports-ssh-security-keys/) for details.
 
-To verify a YubiKey is genuine, open a [browser with U2F support](https://support.yubico.com/support/solutions/articles/15000009591-how-to-confirm-your-yubico-device-is-genuine-with-u2f) to [https://www.yubico.com/genuine/](https://www.yubico.com/genuine/). Insert a Yubico device, and select *Verify Device* to begin the process. Touch the YubiKey when prompted, and if asked, allow it to see the make and model of the device. If you see *Verification complete*, the device is authentic.
+To verify a YubiKey is genuine, open a [browser with U2F support](https://support.yubico.com/hc/en-us/articles/360013723419-How-to-Confirm-Your-Yubico-Device-is-Genuine) to [https://www.yubico.com/genuine/](https://www.yubico.com/genuine/). Insert a Yubico device, and select *Verify Device* to begin the process. Touch the YubiKey when prompted, and if asked, allow it to see the make and model of the device. If you see *Verification complete*, the device is authentic.
 
 This website verifies YubiKey device attestation certificates signed by a set of Yubico certificate authorities, and helps mitigate [supply chain attacks](https://media.defcon.org/DEF%20CON%2025/DEF%20CON%2025%20presentations/DEF%20CON%2025%20-%20r00killah-and-securelyfitz-Secure-Tokin-and-Doobiekeys.pdf).
 
@@ -121,11 +121,11 @@ This guide recommends using a bootable "live" Debian Linux image to provide such
 To use Debian Live, download the latest image:
 
 ```console
-$ curl -LfO https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS
+$ curl -fLO https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS
 
-$ curl -LfO https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS.sign
+$ curl -fLO https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS.sign
 
-$ curl -LfO https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/$(awk '/xfce.iso/ {print $2}' SHA512SUMS)
+$ curl -fLO "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/$(awk '/xfce.iso$/ {print $2}' SHA512SUMS)"
 ```
 
 Verify the signature of the hashes file with GPG:
@@ -289,219 +289,32 @@ $ sudo yum install -y gnupg2 pinentry-curses pcsc-lite pcsc-lite-libs gnupg2-smi
 
 ## NixOS
 
-Generate an air-gapped NixOS LiveCD image with the given config:
-
-```nix
-# yubikey-installer.nix
-let
-  configuration = { config, lib, pkgs, ... }:
-    with pkgs;
-    let
-      src = fetchGit "https://github.com/drduh/YubiKey-Guide";
-
-      guide = "${src}/README.md";
-
-      contrib = "${src}/contrib";
-
-      drduhConfig = fetchGit "https://github.com/drduh/config";
-
-      gpg-conf = "${drduhConfig}/gpg.conf";
-
-      xserverCfg = config.services.xserver;
-
-      pinentryFlavour = if xserverCfg.desktopManager.lxqt.enable || xserverCfg.desktopManager.plasma5.enable then
-        "qt"
-      else if xserverCfg.desktopManager.xfce.enable then
-        "gtk2"
-      else if xserverCfg.enable || config.programs.sway.enable then
-        "gnome3"
-      else
-        "curses";
-
-      # Instead of hard-coding the pinentry program, chose the appropriate one
-      # based on the environment of the image the user has chosen to build.
-      gpg-agent-conf = runCommand "gpg-agent.conf" {} ''
-        sed '/pinentry-program/d' ${drduhConfig}/gpg-agent.conf > $out
-        echo "pinentry-program ${pinentry.${pinentryFlavour}}/bin/pinentry" >> $out
-      '';
-
-      view-yubikey-guide = writeShellScriptBin "view-yubikey-guide" ''
-        viewer="$(type -P xdg-open || true)"
-        if [ -z "$viewer" ]; then
-          viewer="${glow}/bin/glow -p"
-        fi
-        exec $viewer "${guide}"
-      '';
-
-      shortcut = makeDesktopItem {
-        name = "yubikey-guide";
-        icon = "${yubikey-manager-qt}/share/ykman-gui/icons/ykman.png";
-        desktopName = "drduh's YubiKey Guide";
-        genericName = "Guide to using YubiKey for GPG and SSH";
-        comment = "Open the guide in a reader program";
-        categories = [ "Documentation" ];
-        exec = "${view-yubikey-guide}/bin/view-yubikey-guide";
-      };
-
-      yubikey-guide = symlinkJoin {
-        name = "yubikey-guide";
-        paths = [ view-yubikey-guide shortcut ];
-      };
-
-    in {
-      nixpkgs.overlays = [
-        # hopenpgp-tools in nixpkgs 23.05 is out-of-date and has a broken build
-        (final: prev: {
-          haskellPackages = prev.haskellPackages.override {
-            overrides = hsFinal: hsPrev:
-              let
-                optparse-applicative =
-                  final.haskell.lib.overrideCabal hsPrev.optparse-applicative
-                  (oldAttrs: {
-                    version = "0.18.1.0";
-                    sha256 =
-                      "sha256-Y4EatP0m6Cm4hoNkMlqIvjrMeYGfW7UAWy3TuWHsxJE=";
-                    libraryHaskellDepends =
-                      (oldAttrs.libraryHaskellDepends or [ ])
-                      ++ (with hsFinal; [
-                        text
-                        prettyprinter
-                        prettyprinter-ansi-terminal
-                      ]);
-                  });
-                hopenpgp-tools =
-                  (final.haskell.lib.overrideCabal hsPrev.hopenpgp-tools
-                    (oldAttrs: {
-                      version = "0.23.8";
-                      sha256 =
-                        "sha256-FYvlVE0o/LOYk3a2rucAqm7tg5D/uNQRRrCu/wlDNAE=";
-                      broken = false;
-                    })).override { inherit optparse-applicative; };
-              in { inherit hopenpgp-tools; };
-          };
-        })
-      ];
-
-      isoImage.isoBaseName = lib.mkForce "nixos-yubikey";
-      # Uncomment this to disable compression and speed up image creation time
-      #isoImage.squashfsCompression = "gzip -Xcompression-level 1";
-
-      # Always copytoram so that, if the image is booted from, e.g., a
-      # USB stick, nothing is mistakenly written to persistent storage.
-      boot.kernelParams = [ "copytoram" ];
-      # Secure defaults
-      boot.tmp.cleanOnBoot = true;
-      boot.kernel.sysctl = { "kernel.unprivileged_bpf_disabled" = 1; };
-
-      services.pcscd.enable = true;
-      services.udev.packages = [ yubikey-personalization ];
-
-      programs = {
-        ssh.startAgent = false;
-        gnupg.agent = {
-          enable = true;
-          enableSSHSupport = true;
-        };
-      };
-
-      environment.systemPackages = [
-        # Tools for backing up keys
-        paperkey
-        pgpdump
-        parted
-        cryptsetup
-
-        # Yubico's official tools
-        yubikey-manager
-        yubikey-manager-qt
-        yubikey-personalization
-        yubikey-personalization-gui
-        yubico-piv-tool
-        yubioath-flutter
-
-        # Testing
-        ent
-        (haskell.lib.justStaticExecutables haskellPackages.hopenpgp-tools)
-
-        # Password generation tools
-        diceware
-        pwgen
-
-        # Miscellaneous tools that might be useful beyond the scope of the guide
-        cfssl
-        pcsctools
-
-        # This guide itself (run `view-yubikey-guide` on the terminal to open it
-        # in a non-graphical environment).
-        yubikey-guide
-      ];
-
-      # Disable networking so the system is air-gapped
-      # Comment all of these lines out if you'll need internet access
-      boot.initrd.network.enable = false;
-      networking.dhcpcd.enable = false;
-      networking.dhcpcd.allowInterfaces = [];
-      networking.interfaces = {};
-      networking.firewall.enable = true;
-      networking.useDHCP = false;
-      networking.useNetworkd = false;
-      networking.wireless.enable = false;
-      networking.networkmanager.enable = lib.mkForce false;
-
-      # Unset history so it's never stored
-      # Set GNUPGHOME to an ephemeral location and configure GPG with the
-      # guide's recommended settings.
-      environment.interactiveShellInit = ''
-        unset HISTFILE
-        export GNUPGHOME="/run/user/$(id -u)/gnupg"
-        if [ ! -d "$GNUPGHOME" ]; then
-          echo "Creating \$GNUPGHOME…"
-          install --verbose -m=0700 --directory="$GNUPGHOME"
-        fi
-        [ ! -f "$GNUPGHOME/gpg.conf" ] && cp --verbose ${gpg-conf} "$GNUPGHOME/gpg.conf"
-        [ ! -f "$GNUPGHOME/gpg-agent.conf" ] && cp --verbose ${gpg-agent-conf} "$GNUPGHOME/gpg-agent.conf"
-        echo "\$GNUPGHOME is \"$GNUPGHOME\""
-      '';
-
-      # Copy the contents of contrib to the home directory, add a shortcut to
-      # the guide on the desktop, and link to the whole repo in the documents
-      # folder.
-      system.activationScripts.yubikeyGuide = let
-        homeDir = "/home/nixos/";
-        desktopDir = homeDir + "Desktop/";
-        documentsDir = homeDir + "Documents/";
-      in ''
-        mkdir -p ${desktopDir} ${documentsDir}
-        chown nixos ${homeDir} ${desktopDir} ${documentsDir}
-
-        cp -R ${contrib}/* ${homeDir}
-        ln -sf ${yubikey-guide}/share/applications/yubikey-guide.desktop ${desktopDir}
-        ln -sfT ${src} ${documentsDir}/YubiKey-Guide
-      '';
-    };
-
-  nixos = import <nixpkgs/nixos/release.nix> {
-    inherit configuration;
-    supportedSystems = [ "x86_64-linux" ];
-  };
-
-  # Choose the one you like:
-  #nixos-yubikey = nixos.iso_minimal; # No graphical environment
-  #nixos-yubikey = nixos.iso_gnome;
-  nixos-yubikey = nixos.iso_plasma5;
-
-in {
-  inherit nixos-yubikey;
-}
-```
-
-Build the installer and copy it to a USB drive.
+Generate an air-gapped NixOS LiveCD image:
 
 ```console
-$ nix-build yubikey-installer.nix --out-link installer --attr nixos-yubikey
+$ ref=$(git ls-remote https://github.com/drduh/Yubikey-Guide refs/heads/master | awk '{print $1}')
+$ nix build --experimental-features "nix-command flakes" github:drduh/YubiKey-Guide/$ref#nixosConfigurations.yubikeyLive.x86_64-linux.config.system.build.isoImage
+```
 
-$ sudo cp -v installer/iso/*.iso /dev/sdb; sync
-'installer/iso/nixos-yubikey-22.05beta-248980.gfedcba-x86_64-linux.iso' -> '/dev/sdb'
+If you have this repository checked out:
+
+Recommended, but optional: update `nixpkgs` and `drduh/config`:
+
+```console
+$ nix flake update --commit-lock-file
+```
+
+Generate the ISO:
+
+```console
+$ nix build --experimental-features "nix-command flakes" .#nixosConfigurations.yubikeyLive.x86_64-linux.config.system.build.isoImage
+```
+
+Copy it to a USB drive:
+
+```console
+$ sudo cp -v result/iso/yubikeyLive.iso /dev/sdb; sync
+'result/iso/yubikeyLive.iso' -> '/dev/sdb'
 ```
 
 With this image, you won't need to manually create a [temporary working directory](#temporary-working-directory) or [harden the configuration](#harden-configuration), as it was done when creating the image.
