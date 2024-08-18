@@ -45,6 +45,7 @@ To suggest an improvement, send a pull request or open an [issue](https://github
       + [Chained GnuPG agent forwarding](#chained-gnupg-agent-forwarding)
    * [Using multiple YubiKeys](#using-multiple-yubikeys)
    * [Email](#email)
+      + [Thunderbird](#thunderbird)
       + [Mailvelope](#mailvelope)
       + [Mutt](#mutt)
    * [Keyserver](#keyserver)
@@ -347,7 +348,7 @@ This guide recommends a two year expiration for Subkeys to balance security and 
 
 When Subkeys expire, they may still be used to decrypt with GnuPG and authenticate with SSH, however they can **not** be used to encrypt nor sign new messages.
 
-Subkeys must be renewed or rotated using the Certify key - see [Updating Subkeys](#updating-subkeys).
+Subkeys must be renewed or rotated using the Certify key - see [Updating keys](#updating-keys).
 
 Set the expiration date to two years:
 
@@ -370,7 +371,7 @@ The following commands will generate a strong passphrase and avoid ambiguous cha
 ```console
 export CERTIFY_PASS=$(LC_ALL=C tr -dc 'A-Z1-9' < /dev/urandom | \
   tr -d "1IOS5U" | fold -w 30 | sed "-es/./ /"{1..26..5} | \
-  cut -c2- | tr " " "-" | head -1) ; echo "\n$CERTIFY_PASS\n"
+  cut -c2- | tr " " "-" | head -1) ; printf "\n$CERTIFY_PASS\n\n"
 ```
 
 Write the passphrase in a secure location, ideally separate from the portable storage device used for key material, or memorize it.
@@ -510,7 +511,7 @@ Generate another unique [Passphrase](#passphrase) (ideally different from the on
 ```console
 export LUKS_PASS=$(LC_ALL=C tr -dc 'A-Z1-9' < /dev/urandom | \
   tr -d "1IOS5U" | fold -w 30 | sed "-es/./ /"{1..26..5} | \
-  cut -c2- | tr " " "-" | head -1) ; echo "\n$LUKS_PASS\n"
+  cut -c2- | tr " " "-" | head -1) ; printf "\n$LUKS_PASS\n\n"
 ```
 
 This passphrase will also be used infrequently to access the Certify key and should be very strong.
@@ -911,8 +912,7 @@ Install the required packages:
 ```console
 sudo apt update
 
-sudo apt install -y \
-  gnupg gnupg-agent gnupg-curl scdaemon pcscd
+sudo apt install -y gnupg gnupg-agent scdaemon pcscd
 ```
 
 **OpenBSD**
@@ -968,7 +968,7 @@ Determine the key ID:
 ```console
 gpg -k
 
-KEYID=0xF0F2CFEB04341FB5
+export KEYID=0xF0F2CFEB04341FB5
 ```
 
 Assign ultimate trust by typing `trust` and selecting option `5` then `quit`:
@@ -1352,16 +1352,9 @@ Add the following to the shell rc file:
 
 ```console
 export GPG_TTY="$(tty)"
-export SSH_AUTH_SOCK="/run/user/$UID/gnupg/S.gpg-agent.ssh"
-gpg-connect-agent updatestartuptty /bye > /dev/null
-```
-
-On modern systems, `gpgconf --list-dirs agent-ssh-socket` will automatically set `SSH_AUTH_SOCK` to the correct value and is better than hard-coding to `run/user/$UID/gnupg/S.gpg-agent.ssh`, if available:
-
-```console
-export GPG_TTY="$(tty)"
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 gpgconf --launch gpg-agent
+gpg-connect-agent updatestartuptty /bye > /dev/null
 ```
 
 For fish, `config.fish` should look like this (consider putting them into the `is-interactive` block):
@@ -1669,6 +1662,12 @@ See discussion in Issues [#19](https://github.com/drduh/YubiKey-Guide/issues/19)
 ## Email
 
 YubiKey can be used to decrypt and sign emails and attachments using [Thunderbird](https://www.thunderbird.net/), [Enigmail](https://www.enigmail.net) and [Mutt](http://www.mutt.org/). Thunderbird supports OAuth 2 authentication and can be used with Gmail. See [this EFF guide](https://ssd.eff.org/en/module/how-use-pgp-linux) for more information. Mutt has OAuth 2 support since version 2.0.
+
+### Thunderbird
+
+Follow [instructions on the mozilla wiki](https://wiki.mozilla.org/Thunderbird:OpenPGP:Smartcards#Configure_an_email_account_to_use_an_external_GnuPG_key) to setup your YubiKey with your thunderbird client using the external gpg provider.
+
+**Important** Thunderbird [fails](https://github.com/drduh/YubiKey-Guide/issues/448) to decrypt emails if the ASCII `armor` option is enabled in your `~/.gnupg/gpg.conf`. If you see the error `gpg: [don't know]: invalid packet (ctb=2d)` or `message cannot be decrypted (there are unknown problems with this encrypted message)` simply remove this option from your config file.
 
 ### Mailvelope
 
