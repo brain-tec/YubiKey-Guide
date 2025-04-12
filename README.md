@@ -87,27 +87,31 @@ The following is a general ranking of environments least to most hospitable to g
 
 Debian Live is used in this guide to balance usability and security, with some additional instructions for OpenBSD.
 
-Download the latest image and signature files:
+Download the latest Debian Live image and signature files:
 
 ```console
-curl -fLO "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS"
+export IMAGE_URL="https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/"
 
-curl -fLO "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA512SUMS.sign"
+curl -fLO "$IMAGE_URL/SHA512SUMS" -O "$IMAGE_URL/SHA512SUMS.sign"
 
-curl -fLO "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/$(awk '/xfce.iso$/ {print $2}' SHA512SUMS)"
+curl -fLO "$IMAGE_URL/$(awk '/xfce.iso$/ {print $2}' SHA512SUMS)"
 ```
 
 Download the Debian signing public key:
 
 ```console
-gpg --keyserver hkps://keyring.debian.org --recv DF9B9C49EAA9298432589D76DA87E80D6294BE9B
+gpg --keyserver hkps://keyring.debian.org \
+    --recv DF9B9C49EAA9298432589D76DA87E80D6294BE9B
 ```
 
 If the public key cannot be received, use a different keyserver or DNS server:
 
 ```console
-gpg --keyserver hkps://keyserver.ubuntu.com:443 --recv DF9B9C49EAA9298432589D76DA87E80D6294BE9B
+gpg --keyserver hkps://keyserver.ubuntu.com:443 \
+    --recv DF9B9C49EAA9298432589D76DA87E80D6294BE9B
 ```
+
+The Debian Live signing public key is also available in [`pubkeys`](https://github.com/drduh/YubiKey-Guide/tree/master/pubkeys).
 
 Verify the signature:
 
@@ -196,6 +200,14 @@ brew install \
 > [!NOTE]
 > An additional Python package dependency may need to be installed to use [`ykman`](https://support.yubico.com/support/solutions/articles/15000012643-yubikey-manager-cli-ykman-user-guide) - `pip install yubikey-manager`
 
+Or 
+
+Install [MacPorts](https://www.macports.org/install.php) and the following packages:
+
+```console
+sudo port install gnupg2 yubikey-manager pinentry wget
+```
+
 **NixOS**
 
 Build an air-gapped NixOS LiveCD image:
@@ -245,7 +257,7 @@ qemu-system-x86_64 \
 **Arch**
 
 ```console
-sudo pacman -Syu gnupg pcsclite ccid yubikey-personalization
+sudo pacman -Syu --needed gnupg pcsclite ccid yubikey-personalization
 ```
 
 **RHEL7**
@@ -975,6 +987,19 @@ sudo apt update
 sudo apt install -y gnupg gnupg-agent scdaemon pcscd
 ```
 
+**Arch**
+
+```console
+sudo pacman -S --needed gnupg pcsc-tools
+sudo systemctl enable --now pcscd.service
+```
+
+**macOS**
+
+```console
+sudo port install gnupg2 pcsc-tools
+```
+
 **OpenBSD**
 
 ```console
@@ -1016,6 +1041,8 @@ gpg --recv $KEYID
 ```
 
 Or with the URL on YubiKey, retrieve the public key:
+
+using the command `gpg-card`
 
 ```console
 gpg/card> fetch
@@ -1225,10 +1252,10 @@ wget https://raw.githubusercontent.com/drduh/config/main/gpg-agent.conf
 
 **macOS**
 
-Install pinentry with `brew install pinentry-mac` then edit `gpg-agent.conf` to set the `pinentry-program` path to:
+Install pinentry with `brew install pinentry-mac` or `sudo port install pinentry` then edit `gpg-agent.conf` to set the `pinentry-program` path to:
 
 * Apple Silicon Macs: `/opt/homebrew/bin/pinentry-mac`
-* Intel Macs: `/usr/local/bin/pinentry-mac`
+* Intel Macs: `/usr/local/bin/pinentry-mac` or `/opt/local/bin/pinentry` (MacPorts)
 * MacGPG Suite: `/usr/local/MacGPG2/libexec/pinentry-mac.app/Contents/MacOS/pinentry-mac`
 
 Then run `gpgconf --kill gpg-agent` for the change to take effect.
