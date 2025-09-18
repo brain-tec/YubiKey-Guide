@@ -268,16 +268,10 @@ sudo yum install -y gnupg2 pinentry-curses pcsc-lite pcsc-lite-libs gnupg2-smime
 **Fedora**
 
 ```console
-sudo dnf install wget
-
-wget https://github.com/rpmsphere/noarch/raw/master/r/rpmsphere-release-38-1.noarch.rpm
-
-sudo rpm -Uvh rpmsphere-release*rpm
-
 sudo dnf install \
-    gnupg2 dirmngr cryptsetup gnupg2-smime \
-    pcsc-tools opensc pcsc-lite secure-delete \
-    pgp-tools yubikey-personalization-gui
+    wget gnupg2 \
+    cryptsetup pcsc-lite \
+    yubikey-personalization-gui yubikey-manager
 ```
 
 # Prepare GnuPG
@@ -1628,7 +1622,7 @@ You should now be able to use `ssh -A remote` on the _local_ host to log into _r
 
 #### Use S.gpg-agent.ssh
 
-First you need to go through [GnuPG agent forwarding)](#gnupg-agent-forwarding), know the conditions for gpg-agent forwarding and know the location of `S.gpg-agent.ssh` on both the local and the remote.
+First you need to go through [GnuPG agent forwarding](#gnupg-agent-forwarding), know the conditions for gpg-agent forwarding and know the location of `S.gpg-agent.ssh` on both the local and the remote.
 
 You may use the command:
 
@@ -1745,7 +1739,7 @@ On the local host, run:
 gpgconf --list-dirs agent-extra-socket
 ```
 
-This should return a path to agent-extra-socket - `/run/user/1000/gnupg/S.gpg-agent.extra` - though on older Linux distros (and macOS) it may be `/home/<user>/.gnupg/S/gpg-agent.extra`
+This should return a path to agent-extra-socket - `/run/user/1000/gnupg/S.gpg-agent.extra` - though on older Linux distros (and macOS) it may be `/home/<user>/.gnupg/S.gpg-agent.extra`
 
 Find the agent socket on the **remote** host:
 
