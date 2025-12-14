@@ -498,7 +498,7 @@ Followed by the Authentication Subkey:
 > [!NOTE]
 > Some systems no longer accept RSA for SSH authentication; to use [Ed25519](https://ed25519.cr.yp.to/), set the `KEY_TYPE` variable to `ed25519` before generating Authentication Subkey.
 
-```
+```console
 echo "$CERTIFY_PASS" | \
     gpg --batch --pinentry-mode=loopback --passphrase-fd 0 \
         --quick-add-key "$KEYFP" "$KEY_TYPE" auth "$EXPIRATION"
