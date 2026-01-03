@@ -268,9 +268,9 @@ sudo yum install -y gnupg2 pinentry-curses pcsc-lite pcsc-lite-libs gnupg2-smime
 **Fedora**
 
 ```console
-sudo dnf install \
+sudo dnf install --skip-unavailable \
     wget gnupg2 \
-    cryptsetup pcsc-lite \
+    cryptsetup gnupg2-scdaemon pcsc-lite \
     yubikey-personalization-gui yubikey-manager
 ```
 
