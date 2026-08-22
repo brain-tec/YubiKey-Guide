@@ -1,3 +1,39 @@
+# Required software
+
+## macOS
+
+```bash
+brew install openssl libp11 opensc
+```
+
+# Configure names
+
+Set root name:
+
+```bash
+export NAME_ROOT="/CN=yk.root.$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 16)"
+```
+
+Set intermediate name:
+
+```bash
+export NAME_IA="/CN=yk.intermediate.$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 16)"
+```
+
+Set server name:
+
+```bash
+export NAME_SERVER="/CN=example.local"
+```
+
+Print names:
+
+```bash
+printf '\nRoot Name:\t\t%s'       "$NAME_ROOT"
+printf '\nIntermediate Name:\t%s' "$NAME_IA"
+printf '\nServer Name:\t\t%s\n\n' "$NAME_SERVER"
+```
+
 # Root Certificate
 
 ## Prepare root configuration
@@ -8,34 +44,13 @@ Create a temporary directory:
 cd $(mktemp -d)
 ```
 
-Create `root.cnf`:
+Copy [`root.cnf`](./root.cnf):
 
-```conf
-[ req ]
-x509_extensions        = v3_ca
-
-[ v3_ca ]
-authorityKeyIdentifier = keyid:always,issuer
-basicConstraints       = critical, CA:true
-keyUsage               = critical, keyCertSign, cRLSign
-subjectKeyIdentifier   = hash
-
-[ ca ]
-default_ca             = yk_piv_ca
-
-[ yk_piv_ca ]
-default_md             = sha512
-dir                    = ./yk_piv_ca
-database               = $dir/index
-new_certs_dir          = $dir/certs
-serial                 = $dir/serial
-policy                 = policy_piv_ca
-
-[ policy_piv_ca ]
-commonName             = supplied
+```bash
+cp ~/git/YubiKey-Guide/piv/root.cnf .
 ```
 
-Set OpenSSL path:
+Set path to compatible OpenSSL:
 
 ```bash
 export OPENSSL=/opt/homebrew/bin/openssl
@@ -44,9 +59,9 @@ export OPENSSL=/opt/homebrew/bin/openssl
 Prepare root materials:
 
 ```bash
-mkdir -p yk_piv_ca/certs
-touch yk_piv_ca/index
-$OPENSSL rand -hex 16 > yk_piv_ca/serial
+mkdir -p certs
+touch index
+$OPENSSL rand -hex 16 > serial
 ```
 
 ## Generate root key
@@ -61,18 +76,10 @@ $OPENSSL genrsa -out root.key
 
 ## Issue root certificate request
 
-Set root common name:
-
-```bash
-export CA_NAME="/CN=yk.$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 16)"
-```
-
-Generate CSR:
-
 ```bash
 $OPENSSL req -new \
   -config root.cnf \
-  -subj "$CA_NAME" \
+  -subj "$NAME_ROOT" \
   -key root.key \
   -out root.csr
 ```
@@ -80,11 +87,13 @@ $OPENSSL req -new \
 ## Sign root certificate
 
 ```bash
+local DATE_START="$(date -u -v0H -v0M -v0S '+%Y%m%d%H%M%SZ')"
+local DATE_END="20500101000000Z"
 $OPENSSL ca -selfsign -batch \
   -config root.cnf \
-  -extensions "v3_ca" \
-  -startdate "$(date -u -v0H -v0M -v0S '+%Y%m%d%H%M%SZ')" \
-  -enddate "20500101000000Z" \
+  -extensions config_root \
+  -startdate "$DATE_START" \
+  -enddate "$DATE_END" \
   -keyfile root.key \
   -in root.csr \
   -out root.pem
@@ -93,10 +102,58 @@ $OPENSSL ca -selfsign -batch \
 ## Verify root certificate
 
 ```bash
-$OPENSSL x509 -text -noout -in root.pem
+$OPENSSL x509 -noout -text -in root.pem
 ```
 
-# YubiKey Transfer
+## Save materials offline
+
+TODO: Copy certificate authority files to encrypted storage
+
+# Intermediate certificate
+
+## Generate intermediate key
+
+Select from one of the following key types:
+
+```bash
+$OPENSSL ecparam -genkey -name secp384r1 -out intermediate.key
+$OPENSSL genpkey -algorithm ed25519 -out intermediate.key
+$OPENSSL genrsa -out intermediate.key
+```
+
+## Issue intermediate certificate request
+
+```bash
+$OPENSSL req -new \
+  -config root.cnf \
+  -subj "$NAME_IA" \
+  -key intermediate.key \
+  -out intermediate.csr
+```
+
+## Sign intermediate certificate
+
+```bash
+local IA_DAYS=730
+$OPENSSL ca \
+  -batch \
+  -config root.cnf \
+  -extensions config_intermediate \
+  -days "$IA_DAYS" \
+  -keyfile root.key \
+  -cert root.pem \
+  -in intermediate.csr \
+  -out intermediate.pem
+```
+
+## Verify intermediate certificate
+
+```bash
+$OPENSSL x509 -text -noout -in intermediate.pem
+$OPENSSL verify -CAfile root.pem intermediate.pem
+```
+
+## YubiKey Transfer
 
 ## Reset
 
@@ -107,70 +164,23 @@ ykman piv reset
 
 ## Load
 
+YubiKey PIV slots:
+
+```console
+9a is for PIV Authentication
+9c is for Digital Signature (PIN always checked)
+9d is for Key Management
+9e is for Card Authentication (PIN never checked)
+```
+
+Load slot `9c`:
+
 ```bash
-ykman piv keys import 9c root.key
-ykman piv certificates import 9c root.pem
+ykman piv keys import 9c intermediate.key
+ykman piv certificates import 9c intermediate.pem
 ```
 
 # Server Certificates
-
-## Prepare server configuration
-
-Edit `server.cnf`:
-
-```conf
-openssl_conf         = openssl_init
-
-[ openssl_init ]
-engines              = engine_section
-
-[ engine_section ]
-pkcs11               = pkcs11_section
-
-[ pkcs11_section ]
-dynamic_path         = /opt/homebrew/lib/engines-3/libpkcs11.dylib
-MODULE_PATH          = /opt/homebrew/lib/opensc-pkcs11.so
-init                 = 1
-engine_id            = pkcs11
-
-[ ca ]
-default_ca           = yk_piv_server
-
-[ yk_piv_server ]
-certificate          = root.pem
-default_days         = 100
-default_md           = sha512
-dir                  = ./yk_piv_server
-database             = $dir/index
-new_certs_dir        = $dir/certs
-serial               = $dir/serial
-private_key          = pkcs11:object=%02;type=private
-policy               = policy_piv_server
-
-[ policy_piv_server ]
-commonName           = supplied
-
-[ yk_piv_server_cert ]
-basicConstraints     = CA:FALSE
-extendedKeyUsage     = serverAuth
-keyUsage             = digitalSignature, keyEncipherment
-nsCertType           = server
-subjectKeyIdentifier = hash
-subjectAltName       = @alt_names
-
-[ alt_names ]
-DNS.1                = example.local
-```
-
-```bash
-export OPENSSL=/opt/homebrew/bin/openssl
-```
-
-```bash
-mkdir -p yk_piv_server/certs
-touch yk_piv_server/index
-$OPENSSL rand -hex 16 > yk_piv_server/serial
-```
 
 ## Generate server key
 
@@ -185,39 +195,40 @@ $OPENSSL genrsa -out server.key
 ## Issue server certificate request
 
 ```bash
-export SERVER_NAME="/CN=example.local"
-```
-
-```bash
 $OPENSSL req -new \
-  -config server.cnf \
-  -subj "$SERVER_NAME" \
+  -config root.cnf \
+  -subj "$NAME_SERVER" \
   -key server.key \
   -out server.csr
 ```
 
-## Get root certificate
+## Get intermediate certificate
 
 ```bash
-ykman piv certificates export 9c - > root.pem
+ykman piv certificates export 9c - > intermediate.pem
 ```
 
 ## Sign server certificate
 
 ```bash
-OPENSSL_CONF=server.cnf $OPENSSL ca \
+local SERVER_DAYS=100
+$OPENSSL ca \
   -batch \
-  -engine pkcs11 \
-  -keyform engine \
-  -keyfile "pkcs11:id=%02;type=private" \
-  -extensions yk_piv_server_cert \
-  -days 100 \
+  -config root.cnf \
+  -extensions config_server \
+  -days "${SERVER_DAYS:-100}" \
+  -cert intermediate.pem \
+  -keyfile 'pkcs11:id=%02;object=SIGN%20key;type=private' \
   -in server.csr \
-  -out cert.pem
+  -out server.pem
 ```
 
 ## Verify server certificate
 
 ```bash
-$OPENSSL x509 -text -noout -in cert.pem
+$OPENSSL x509 -text -noout -in server.pem
+$OPENSSL verify \
+  -CAfile root.pem \
+  -untrusted intermediate.pem \
+  server.pem
 ```
