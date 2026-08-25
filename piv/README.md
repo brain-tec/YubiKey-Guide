@@ -133,13 +133,14 @@ $OPENSSL req -new \
 
 ## Sign intermediate certificate
 
+Sign the intermediate certificate for two years (730 days):
+
 ```bash
-local IA_DAYS=730
 $OPENSSL ca \
   -batch \
   -config root.cnf \
   -extensions config_intermediate \
-  -days "$IA_DAYS" \
+  -days "${IA_DAYS:-730}" \
   -keyfile root.key \
   -cert root.pem \
   -in intermediate.csr \
@@ -210,13 +211,14 @@ ykman piv certificates export 9c - > intermediate.pem
 
 ## Sign server certificate
 
+Sign a server certificate for 99 days using YubiKey:
+
 ```bash
-local SERVER_DAYS=100
 $OPENSSL ca \
   -batch \
   -config root.cnf \
   -extensions config_server \
-  -days "${SERVER_DAYS:-100}" \
+  -days "${SERVER_DAYS:-99}" \
   -cert intermediate.pem \
   -keyfile 'pkcs11:id=%02;object=SIGN%20key;type=private' \
   -in server.csr \
@@ -231,4 +233,39 @@ $OPENSSL verify \
   -CAfile root.pem \
   -untrusted intermediate.pem \
   server.pem
+```
+
+# Troubleshooting
+
+Get help with CA application:
+
+```bash
+man openssl-ca
+$OPENSSL ca -help
+```
+
+Examine card contents:
+
+```bash
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --list-slots
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects \
+  --type privkey
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects \
+  --type privkey \
+  --id 02
 ```
