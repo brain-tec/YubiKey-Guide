@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# https://github.com/drduh/YubiKey-Guide/blob/main/piv/generateRoot.sh
+# https://github.com/drduh/YubiKey-Guide/blob/main/piv/generateCerts.sh
 
 #set -x  # uncomment to debug
 set -o errexit
@@ -11,7 +11,7 @@ umask 077
 
 export LC_ALL="C"
 export NAME_SERVER="" # required for alt names config
-export OPENSSL_CNF="root.cnf"
+export OPENSSL_CNF="yk.cnf"
 
 timestamp() { # Format current date and time.
   date +"%A %b %d %H:%M:%S"

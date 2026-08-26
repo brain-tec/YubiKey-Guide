@@ -44,10 +44,10 @@ Create a temporary directory:
 cd $(mktemp -d)
 ```
 
-Copy [`root.cnf`](./root.cnf):
+Copy [`yk.cnf`](./yk.cnf):
 
 ```bash
-cp ~/git/YubiKey-Guide/piv/root.cnf .
+cp ~/git/YubiKey-Guide/piv/yk.cnf .
 ```
 
 Set path to compatible OpenSSL:
@@ -78,7 +78,7 @@ $OPENSSL genrsa -out root.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_ROOT" \
   -key root.key \
   -out root.csr
@@ -90,7 +90,7 @@ $OPENSSL req -new \
 local DATE_START="$(date -u -v0H -v0M -v0S '+%Y%m%d%H%M%SZ')"
 local DATE_END="20500101000000Z"
 $OPENSSL ca -selfsign -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_root \
   -startdate "$DATE_START" \
   -enddate "$DATE_END" \
@@ -125,7 +125,7 @@ $OPENSSL genrsa -out intermediate.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_IA" \
   -key intermediate.key \
   -out intermediate.csr
@@ -138,7 +138,7 @@ Sign the intermediate certificate for two years (730 days):
 ```bash
 $OPENSSL ca \
   -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_intermediate \
   -days "${IA_DAYS:-730}" \
   -keyfile root.key \
@@ -197,7 +197,7 @@ $OPENSSL genrsa -out server.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_SERVER" \
   -key server.key \
   -out server.csr
@@ -216,7 +216,7 @@ Sign a server certificate for 99 days using YubiKey:
 ```bash
 $OPENSSL ca \
   -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_server \
   -days "${SERVER_DAYS:-99}" \
   -cert intermediate.pem \
