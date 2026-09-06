@@ -44,10 +44,10 @@ Create a temporary directory:
 cd $(mktemp -d)
 ```
 
-Copy [`root.cnf`](./root.cnf):
+Copy [`yk.cnf`](./yk.cnf):
 
 ```bash
-cp ~/git/YubiKey-Guide/piv/root.cnf .
+cp ~/git/YubiKey-Guide/piv/yk.cnf .
 ```
 
 Set path to compatible OpenSSL:
@@ -78,7 +78,7 @@ $OPENSSL genrsa -out root.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_ROOT" \
   -key root.key \
   -out root.csr
@@ -90,7 +90,7 @@ $OPENSSL req -new \
 local DATE_START="$(date -u -v0H -v0M -v0S '+%Y%m%d%H%M%SZ')"
 local DATE_END="20500101000000Z"
 $OPENSSL ca -selfsign -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_root \
   -startdate "$DATE_START" \
   -enddate "$DATE_END" \
@@ -125,7 +125,7 @@ $OPENSSL genrsa -out intermediate.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_IA" \
   -key intermediate.key \
   -out intermediate.csr
@@ -133,13 +133,14 @@ $OPENSSL req -new \
 
 ## Sign intermediate certificate
 
+Sign the intermediate certificate for two years (730 days):
+
 ```bash
-local IA_DAYS=730
 $OPENSSL ca \
   -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_intermediate \
-  -days "$IA_DAYS" \
+  -days "${IA_DAYS:-730}" \
   -keyfile root.key \
   -cert root.pem \
   -in intermediate.csr \
@@ -196,7 +197,7 @@ $OPENSSL genrsa -out server.key
 
 ```bash
 $OPENSSL req -new \
-  -config root.cnf \
+  -config yk.cnf \
   -subj "$NAME_SERVER" \
   -key server.key \
   -out server.csr
@@ -210,13 +211,14 @@ ykman piv certificates export 9c - > intermediate.pem
 
 ## Sign server certificate
 
+Sign a server certificate for 99 days using YubiKey:
+
 ```bash
-local SERVER_DAYS=100
 $OPENSSL ca \
   -batch \
-  -config root.cnf \
+  -config yk.cnf \
   -extensions config_server \
-  -days "${SERVER_DAYS:-100}" \
+  -days "${SERVER_DAYS:-99}" \
   -cert intermediate.pem \
   -keyfile 'pkcs11:id=%02;object=SIGN%20key;type=private' \
   -in server.csr \
@@ -231,4 +233,39 @@ $OPENSSL verify \
   -CAfile root.pem \
   -untrusted intermediate.pem \
   server.pem
+```
+
+# Troubleshooting
+
+Get help with CA application:
+
+```bash
+man openssl-ca
+$OPENSSL ca -help
+```
+
+Examine card contents:
+
+```bash
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --list-slots
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects \
+  --type privkey
+
+pkcs11-tool \
+  --module /opt/homebrew/lib/opensc-pkcs11.so \
+  --login \
+  --list-objects \
+  --type privkey \
+  --id 02
 ```

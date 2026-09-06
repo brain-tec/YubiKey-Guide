@@ -1,4 +1,4 @@
-# https://github.com/drduh/YubiKey-Guide/blob/main/piv/root.cnf
+# https://github.com/drduh/YubiKey-Guide/blob/main/piv/yk.cnf
 
 openssl_conf = openssl_init
 
