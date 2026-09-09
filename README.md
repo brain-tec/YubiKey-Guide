@@ -3,7 +3,7 @@ This guide demonstrates how to store credentials on a [YubiKey](https://www.yubi
 - [Purchase YubiKey](#purchase-yubikey)
 - [Prepare setup environment](#prepare-setup-environment)
   - [Download and verify Debian](#download-and-verify-debian)
-  - [Create bootable USB device](#create-bootable-usb-drive)
+  - [Create bootable USB device](#create-bootable-usb-device)
   - [Prepare hardware](#prepare-hardware)
 - [Install software](#install-software)
 - [Prepare GnuPG](#prepare-gnupg)
