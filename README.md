@@ -81,7 +81,7 @@ The following environments are ordered from least to most secure for this task:
 1. Daily-use personal operating system with unrestricted network access
 1. Virtualized system with limited capabilities (using [virt-manager](https://virt-manager.org/), VirtualBox or VMware, for example)
 1. Dedicated and hardened [Debian](https://www.debian.org/) or [OpenBSD](https://www.openbsd.org/) installation
-1. Ephemeral [Debian Live](https://www.debian.org/CD/live/) or [Tails](https://tails.boum.org/index.en.html) booted without primary storage attached
+1. Ephemeral [Debian Live](https://www.debian.org/CD/live/) or [Tails](https://tails.net/) booted without primary storage attached
 1. Hardened hardware and firmware (e.g., [Coreboot](https://www.coreboot.org/), [Intel ME removed](https://github.com/corna/me_cleaner))
 1. Air-gapped system without network capabilities, preferably ARM-based Raspberry Pi or other architecturally diverse equivalent
 
@@ -1501,7 +1501,7 @@ Plug in YubiKey, enter the same command to display the SSH key.
 
 Connect to the remote host and use `ssh-add -l` to confirm forwarding works.
 
-Agent forwarding may be chained through multiple hosts. Follow the same [protocol](#remote-host-configuration) to configure each host.
+Agent forwarding may be chained through multiple hosts. Follow the same [protocol](#chained-forwarding) to configure each host.
 
 An alternate method is the [usbipd-win](https://github.com/dorssel/usbipd-win) library. If you encounter issues with accessing the YubiKey in WSL after configuring usbipd-win, you may need to add custom polkit rules to ensure proper permissions for the pcscd service. Here's an example configuration using a scard group (the group logic is optional):
 
